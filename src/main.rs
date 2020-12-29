@@ -1,7 +1,9 @@
-use std::{io, env, fs, process};
+use std::{io, env, fs};
+use std::process::{self, Command, Stdio};
 
-enum Mode { ENCRYPT, DECRYPT }
-use Mode::{ENCRYPT, DECRYPT};
+use libcrypt::encrypt::*;
+use libcrypt::decrypt::*;
+use libcrypt::Mode::{self, ENCRYPT, DECRYPT};
 
 const AES_SIZE: usize = 16;
 
@@ -27,15 +29,9 @@ fn argparse(args: &Vec<String>) -> Option<Mode> {
             println!("{}", help);
             None
         },
-        "encrypt" | "enc" | "e" => {
-            Some(ENCRYPT)
-        },
-        "decrypt" | "dec" | "d" => {
-            Some(DECRYPT)
-        }
-        _ => {
-            None
-        }
+        "encrypt" | "enc" | "e" => { Some(ENCRYPT) },
+        "decrypt" | "dec" | "d" => { Some(DECRYPT) }
+        _ => { None }
     }
 }
 
@@ -59,141 +55,66 @@ fn main() {
     let mut key = String::new();
     println!("Enter crypt key: ");
     io::stdin().read_line(&mut key).expect("failed to read key input");
-    println!("\u{1b}[F{}\n", String::from_utf8(vec![0x20; key.len()]).unwrap());
+    println!("\u{1b}[F{}", String::from_utf8(vec![0x20; key.len()]).unwrap());
 
     let mut key = String::from(key).into_bytes();
     key.resize(AES_SIZE, 95);
     let key = key;
 
-    let mut msg = fs::read(&input).expect("failed to open file for reading");
+    let file = fs::metadata(&input).expect("failed to collect file metadata");
+    match file.is_file() {
+        true => {
+            let mut msg = fs::read(&input).expect("failed to open file for reading");
 
-    match mode {
-        ENCRYPT => {
-            let ext = (16 - (msg.len() % 16)) % 16;
-            msg.resize(msg.len() + ext, 0);
-            msg.push(ext as u8);
-            msg.append(&mut vec![0u8; 15]);
+            match mode {
+                ENCRYPT => {
+                    let ext = (16 - (msg.len() % 16)) % 16;
+                    msg.resize(msg.len() + ext, 0);
+                    msg.push(ext as u8);
+                    msg.append(&mut vec![0u8; 15]);
 
-            let mut msg_16 = encrypt(&key, &mut msg);
-            for _ in 0..16 {
-                msg_16 = encrypt_16(&key, &mut msg_16);
+                    let mut msg_16 = encrypt(&key, &mut msg);
+                    for _ in 0..16 {
+                        msg_16 = encrypt_16(&key, &mut msg_16);
+                    }
+
+                    let mut msg: Vec<u8> = Vec::new();
+                    for e in msg_16 {
+                        msg.push(e as u8);
+                        msg.push((e >> 8) as u8);
+                    }
+
+                    crypt = msg;
+                },
+                DECRYPT => {
+                    let mut msg_16: Vec<u16> = msg
+                        .chunks_exact(2)
+                        .into_iter()
+                        .map(|e| u16::from_ne_bytes([e[0], e[1]]))
+                        .collect::<Vec<u16>>();
+
+                    for _ in 0..16 {
+                        msg_16 = decrypt_16(&key, &mut msg_16);
+                    }
+                    let mut msg = decrypt(&key, &mut msg_16);
+
+                    let ext = msg[msg.len()-16] as usize;
+                    msg.resize(msg.len() - ext - 16, 0);
+
+                    crypt = msg;
+                }
             }
-
-            let mut msg: Vec<u8> = Vec::new();
-            for e in msg_16 {
-                msg.push(e as u8);
-                msg.push((e >> 8) as u8);
-            }
-
-            crypt = msg;
+            fs::write(output, &crypt).expect("failed to write to output file");
         },
-        DECRYPT => {
-            let mut msg_16: Vec<u16> = msg
-                .chunks_exact(2)
-                .into_iter()
-                .map(|e| u16::from_ne_bytes([e[0], e[1]]))
-                .collect::<Vec<u16>>();
-
-            for _ in 0..16 {
-                msg_16 = decrypt_16(&key, &mut msg_16);
-            }
-            let mut msg = decrypt(&key, &mut msg_16);
-
-            let ext = msg[msg.len()-16] as usize;
-            msg.resize(msg.len() - ext - 16, 0);
-
-            crypt = msg;
+        false => {
+            let d = Command::new("cargo")
+                .args(&["run", "--bin", "cryptd"])
+                .args(&["--", String::from_utf8(key).unwrap().as_str(), &input, &output])
+                // .stderr(Stdio::null())
+                .stdout(Stdio::null())
+                .spawn()
+                .expect("failed to start daemon");
+            println!("started daemon as pid {}", d.id());
         }
     }
-    fs::write(output, &crypt).expect("failed to write to output file");
-}
-
-fn encrypt(key: &Vec<u8>, msg: &mut Vec<u8>) -> Vec<u16> {
-    let mut msg_16: Vec<u16> = Vec::new();
-    for e in msg {
-        msg_16.push(*e as u16);
-    }
-
-    let mut i = 0;
-    while i < msg_16.len() {
-        msg_16[i..(i+4)].rotate_left(i%4);
-        i += 4;
-    }
-
-    i = 0;
-    while i < msg_16.len() {
-        for n in 0..4 {
-            msg_16[i+n] += key[(i+n) % key.len()] as u16;
-        }
-        i += 4;
-    }
-
-    msg_16
-}
-fn encrypt_16(key: &Vec<u8>, msg_16: &mut Vec<u16>) -> Vec<u16> {
-    let mut i = 0;
-    while i < msg_16.len() {
-        msg_16[i..(i+4)].rotate_left(i%4);
-        i += 4;
-    }
-
-    i = 0;
-    while i < msg_16.len() {
-        for n in 0..4 {
-            msg_16[i+n] += key[(i+n) % key.len()] as u16;
-        }
-        i += 4;
-    }
-
-    msg_16.to_vec()
-}
-
-fn decrypt(key: &Vec<u8>, msg_16: &mut Vec<u16>) -> Vec<u8> {
-    let mut i = 0;
-    while i < msg_16.len() {
-        for n in 0..4 {
-            let k = key[(i+n) % key.len()] as u16;
-            if msg_16[i+n] >= k {
-                msg_16[i+n] -= k;
-            }
-        }
-        i += 4;
-    }
-    msg_16.reverse();
-
-    i = 0;
-    while i < msg_16.len() {
-        msg_16[i..(i+4)].rotate_right(i%4);
-        i += 4;
-    }
-    msg_16.reverse();
-
-    let mut msg: Vec<u8> = Vec::new();
-    for e in msg_16.iter() {
-        msg.push(*e as u8);
-    }
-
-    msg
-}
-fn decrypt_16(key: &Vec<u8>, msg_16: &mut Vec<u16>) -> Vec<u16> {
-    let mut i = 0;
-    while i < msg_16.len() {
-        for n in 0..4 {
-            let k = key[(i+n) % key.len()] as u16;
-            if msg_16[i+n] >= k {
-                msg_16[i+n] -= k;
-            }
-        }
-        i += 4;
-    }
-    msg_16.reverse();
-
-    i = 0;
-    while i < msg_16.len() {
-        msg_16[i..(i+4)].rotate_right(i%4);
-        i += 4;
-    }
-    msg_16.reverse();
-
-    msg_16.to_vec()
 }

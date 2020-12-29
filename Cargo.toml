@@ -1,9 +1,30 @@
 [package]
 name = "crypt"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Jeremy Meadows <jeremybmeadows@gmail.com>"]
 edition = "2018"
+default-run = "crypt"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+
+[lib]
+name = "libcrypt"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "crypt"
+path = "src/main.rs"
+
+[[bin]]
+name = "cryptd"
+path = "src/bin/daemon.rs"
+
+[[bin]]
+name = "rand"
+path = "src/bin/rand.rs"
+
+[[test]]
+name = "tests"
+path = "src/tests/tests.rs"
