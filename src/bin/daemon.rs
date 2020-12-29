@@ -4,23 +4,20 @@ use std::time::{Duration, SystemTime};
 
 //use libcrypt::encrypt::*;
 //use libcrypt::decrypt::*;
-//use libcrypt::Mode;
+use libcrypt::Mode;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let (_key, _src, _dest) = (&args[1], &args[2], &args[3]);
-    let home = match env::var("HOME") {
-        Ok(path) => path,
-        Err(_) => String::from("")
-    };
+    let (_key, src, _dest) = (&args[1], &args[2], &args[3]);
+    let mode: Mode;
     let mut dir = HashMap::<String, (u128, bool)>::new();
     let mut dirt = 0;
 
     println!("daemon starting");
 
     loop {
-        match fs::metadata(&home) {
+        match fs::metadata(&src) {
             Ok(data) => {
                 let dt = data.modified().unwrap().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
                 if dirt < dt {
@@ -35,7 +32,7 @@ fn main() {
             Err(_) => {}
         }
         // only checks files owner by current user with open read access
-        for f in fs::read_dir(&home).expect("failed to read source directory") {
+        for f in fs::read_dir(&src).expect("failed to read source directory") {
             let f = f.unwrap().path();
             // gets path of all files
             let path = match f.to_str() {

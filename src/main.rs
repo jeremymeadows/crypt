@@ -1,8 +1,9 @@
 use std::{io, env, fs};
+use std::path::Path;
 use std::process::{self, Command, Stdio};
 
-use libcrypt::encrypt::*;
-use libcrypt::decrypt::*;
+use libcrypt::encrypt::Encryptable;
+use libcrypt::decrypt::Decryptable;
 use libcrypt::Mode::{self, ENCRYPT, DECRYPT};
 
 const AES_SIZE: usize = 16;
@@ -44,13 +45,11 @@ fn main() {
             println!("Invalid arguments. Please run `crypt help` for details.");
             process::exit(0)
         },
-        Some(ENCRYPT) => {},
-        Some(DECRYPT) => {},
+        Some(_) => (),
         None => process::exit(0)
     }
     let mode = mode.unwrap();
-    let (input, output) = (&args[2], &args[3]);
-    let crypt: Vec<u8>;
+    let (input, output) = (Path::new(&args[2]), Path::new(&args[3]));
 
     let mut key = String::new();
     println!("Enter crypt key: ");
@@ -61,55 +60,17 @@ fn main() {
     key.resize(AES_SIZE, 95);
     let key = key;
 
-    let file = fs::metadata(&input).expect("failed to collect file metadata");
-    match file.is_file() {
+    match fs::metadata(&input).expect("failed to collect file metadata").is_file() {
         true => {
-            let mut msg = fs::read(&input).expect("failed to open file for reading");
-
             match mode {
-                ENCRYPT => {
-                    let ext = (16 - (msg.len() % 16)) % 16;
-                    msg.resize(msg.len() + ext, 0);
-                    msg.push(ext as u8);
-                    msg.append(&mut vec![0u8; 15]);
-
-                    let mut msg_16 = encrypt(&key, &mut msg);
-                    for _ in 0..16 {
-                        msg_16 = encrypt_16(&key, &mut msg_16);
-                    }
-
-                    let mut msg: Vec<u8> = Vec::new();
-                    for e in msg_16 {
-                        msg.push(e as u8);
-                        msg.push((e >> 8) as u8);
-                    }
-
-                    crypt = msg;
-                },
-                DECRYPT => {
-                    let mut msg_16: Vec<u16> = msg
-                        .chunks_exact(2)
-                        .into_iter()
-                        .map(|e| u16::from_ne_bytes([e[0], e[1]]))
-                        .collect::<Vec<u16>>();
-
-                    for _ in 0..16 {
-                        msg_16 = decrypt_16(&key, &mut msg_16);
-                    }
-                    let mut msg = decrypt(&key, &mut msg_16);
-
-                    let ext = msg[msg.len()-16] as usize;
-                    msg.resize(msg.len() - ext - 16, 0);
-
-                    crypt = msg;
-                }
+                ENCRYPT => input.encrypt(&key, output),
+                DECRYPT => input.decrypt(&key, output),
             }
-            fs::write(output, &crypt).expect("failed to write to output file");
         },
         false => {
             let d = Command::new("cargo")
                 .args(&["run", "--bin", "cryptd"])
-                .args(&["--", String::from_utf8(key).unwrap().as_str(), &input, &output])
+                // .args(&["--", String::from_utf8(key).unwrap().as_str(), &input, &output])
                 // .stderr(Stdio::null())
                 .stdout(Stdio::null())
                 .spawn()
