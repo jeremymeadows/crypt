@@ -1,12 +1,10 @@
 use std::{io, env, fs, thread};
 use std::collections::HashMap;
-use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use libcrypt::base64;
 use libcrypt::encrypt::Encryptable;
 use libcrypt::decrypt::Decryptable;
-use libcrypt::Mode;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -70,10 +68,14 @@ fn main() {
                     },
                     None => {
                         // println!("{} : {}", path, t);
-                        // println!("\nfrom {}{}", src, file);
-                        let name = base64::encode(file.to_string().encrypt_to_vec(&key.to_vec())).replace("=", "");
-                        // println!("to {}{}", dest, name);
-                        Path::new(&format!("{}{}", src, file)).encrypt(&key.to_vec(), Path::new(&format!("{}{}", dest, name)));
+                        let name = base64::encode(file.as_bytes().to_vec().encrypt(&key.to_vec())).replace("=", "");
+                        let (input, output) = (format!("{}/{}", src, file), format!("{}/{}", dest, name));
+                        println!("\nfrom {}{}", src, file);
+                        println!("to {}{}", dest, name);
+                        let mut contents = fs::read(input).expect("failed to open file for reading");
+                        contents = contents.encrypt(&key);
+                        fs::write(output, contents).expect("failed to write to output file");
+
                         dir.insert(file.to_string(), (t, false));
                     }
                 }

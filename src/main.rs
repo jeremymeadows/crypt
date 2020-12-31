@@ -60,10 +60,14 @@ fn main() {
 
     match fs::metadata(&input).expect("failed to collect file metadata").is_file() {
         true => {
+            let mut contents = fs::read(input).expect("failed to open file for reading");
             match mode {
-                ENCRYPT => input.encrypt(&key, output),
-                DECRYPT => input.decrypt(&key, output),
+                ENCRYPT => contents = contents.encrypt(&key),
+                DECRYPT => contents = contents.decrypt(&key),
             }
+            // let mut contents = fs::read(input).expect("failed to open file for reading");
+            //     contents = contents.encrypt(&key);
+            fs::write(output, contents).expect("failed to write to output file");
         },
         false => {
             let d = Command::new("cargo")

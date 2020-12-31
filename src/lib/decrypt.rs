@@ -1,16 +1,10 @@
-use std::fs;
-use std::path::Path;
-
 pub trait Decryptable {
-    fn decrypt(&self, key: &Vec<u8>, dest: &Path);
+    fn decrypt(&self, key: &Vec<u8>) -> Vec<u8>;
 }
 
-impl Decryptable for Path {
-    fn decrypt(&self, key: &Vec<u8>, dest: &Path) {
-        let mut contents = fs::read(self).expect("failed to open file for reading");
-
-        contents = decrypt(&key, &mut contents);
-        fs::write(dest, contents).expect("failed to write to output file");
+impl Decryptable for Vec<u8> {
+    fn decrypt(&self, key: &Vec<u8>) -> Vec<u8> {
+        decrypt(&key, &mut self.clone())
     }
 }
 
