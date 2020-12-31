@@ -22,6 +22,10 @@ name = "cryptd"
 path = "src/bin/daemon.rs"
 
 [[bin]]
+name = "argparser"
+path = "src/lib/argparser.rs"
+
+[[bin]]
 name = "rand"
 path = "src/bin/rand.rs"
 

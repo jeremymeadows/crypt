@@ -3,6 +3,21 @@ use std::path::Path;
 
 pub trait Encryptable {
     fn encrypt(&self, key: &Vec<u8>, dest: &Path);
+    fn encrypt_to_vec(&self, key: &Vec<u8>) -> Vec<u8>;
+}
+
+impl Encryptable for String {
+    fn encrypt(&self, key: &Vec<u8>, dest: &Path) {
+        let mut contents = self.as_bytes().to_vec();
+
+        contents = encrypt(&key, &mut contents);
+        fs::write(dest, contents).expect("failed to write to output file");
+    }
+
+    fn encrypt_to_vec(&self, key: &Vec<u8>) -> Vec<u8> {
+        let mut contents = self.as_bytes().to_vec();
+        encrypt(key, &mut contents)
+    }
 }
 
 impl Encryptable for Path {
@@ -11,6 +26,12 @@ impl Encryptable for Path {
 
         contents = encrypt(&key, &mut contents);
         fs::write(dest, contents).expect("failed to write to output file");
+    }
+
+    fn encrypt_to_vec(&self, key: &Vec<u8>) -> Vec<u8> {
+        let mut contents = fs::read(self).expect("failed to open file for reading");
+
+        encrypt(&key, &mut contents)
     }
 }
 

@@ -6,7 +6,7 @@ use libcrypt::encrypt::Encryptable;
 use libcrypt::decrypt::Decryptable;
 use libcrypt::Mode::{self, ENCRYPT, DECRYPT};
 
-const AES_SIZE: usize = 16;
+// const AES_SIZE: usize = 16;
 
 fn argparse(args: &Vec<String>) -> Option<Mode> {
     let help = format!("\nUsage: crypt COMMAND INPUT OUTPUT\n\n\
@@ -56,9 +56,7 @@ fn main() {
     io::stdin().read_line(&mut key).expect("failed to read key input");
     println!("\u{1b}[F{}", String::from_utf8(vec![0x20; key.len()]).unwrap());
 
-    let mut key = String::from(key).into_bytes();
-    key.resize(AES_SIZE, 95);
-    let key = key;
+    let key = String::from(key.trim()).into_bytes();
 
     match fs::metadata(&input).expect("failed to collect file metadata").is_file() {
         true => {
@@ -70,7 +68,7 @@ fn main() {
         false => {
             let d = Command::new("cargo")
                 .args(&["run", "--bin", "cryptd"])
-                // .args(&["--", String::from_utf8(key).unwrap().as_str(), &input, &output])
+                .args(&["--", "e", &args[2], &args[3], String::from_utf8(key).unwrap().as_str()])
                 // .stderr(Stdio::null())
                 .stdout(Stdio::null())
                 .spawn()

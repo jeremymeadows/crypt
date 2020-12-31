@@ -9,8 +9,6 @@ pub struct Generator {
 
 #[allow(overflowing_literals)]
 impl Generator {
-    // const X: u32 = 0x7fffffff;
-    // const Y: u32 = 0x3fff;
     const S: usize = 624;
 
     pub fn new() -> Generator {
