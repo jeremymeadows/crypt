@@ -1,12 +1,9 @@
 use std::{io, env, fs};
-use std::path::Path;
 use std::process::{self, Command, Stdio};
 
 use libcrypt::encrypt::Encryptable;
 use libcrypt::decrypt::Decryptable;
 use libcrypt::Mode::{self, ENCRYPT, DECRYPT};
-
-// const AES_SIZE: usize = 16;
 
 fn argparse(args: &Vec<String>) -> Option<Mode> {
     let help = format!("\nUsage: crypt COMMAND INPUT OUTPUT\n\n\
@@ -49,7 +46,7 @@ fn main() {
         None => process::exit(0)
     }
     let mode = mode.unwrap();
-    let (input, output) = (Path::new(&args[2]), Path::new(&args[3]));
+    let (input, output) = (&args[2], &args[3]);
 
     let mut key = String::new();
     println!("Enter crypt key: ");
@@ -57,6 +54,7 @@ fn main() {
     println!("\u{1b}[F{}", String::from_utf8(vec![0x20; key.len()]).unwrap());
 
     let key = String::from(key.trim()).into_bytes();
+    println!("key: {:?}", key);
 
     match fs::metadata(&input).expect("failed to collect file metadata").is_file() {
         true => {
@@ -65,16 +63,19 @@ fn main() {
                 ENCRYPT => contents = contents.encrypt(&key),
                 DECRYPT => contents = contents.decrypt(&key),
             }
-            // let mut contents = fs::read(input).expect("failed to open file for reading");
-            //     contents = contents.encrypt(&key);
             fs::write(output, contents).expect("failed to write to output file");
         },
         false => {
+            let (m, clear, crypt) = match mode {
+                ENCRYPT => ("e", input, output),
+                DECRYPT => ("d", output, input),
+            };
             let d = Command::new("cargo")
-                .args(&["run", "--bin", "cryptd"])
-                .args(&["--", "e", &args[2], &args[3], String::from_utf8(key).unwrap().as_str()])
-                // .stderr(Stdio::null())
-                .stdout(Stdio::null())
+                .args(&["run", "--bin", "cryptd", "--"])
+            // let d = Command::new("cryptd")
+                .args(&[m, clear, crypt, String::from_utf8(key).unwrap().as_str()])
+                .stderr(Stdio::null())
+                // .stdout(Stdio::null())
                 .spawn()
                 .expect("failed to start daemon");
             println!("started daemon as pid {}", d.id());

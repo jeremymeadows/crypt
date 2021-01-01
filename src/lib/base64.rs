@@ -1,6 +1,6 @@
 const BASE64: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-=";
 
-pub fn encode(v: Vec<u8>) -> String {
+pub fn encode(v: &Vec<u8>) -> String {
     let mut bstr = String::new();
     let mut b64str = String::new();
 
@@ -26,7 +26,7 @@ pub fn encode(v: Vec<u8>) -> String {
     b64str
 }
 
-pub fn decode(b64str: String) -> Vec<u8> {
+pub fn decode(b64str: &String) -> Vec<u8> {
     let mut bstr = String::new();
     let mut v = Vec::<u8>::new();
 

@@ -5,29 +5,61 @@ use std::time::{Duration, SystemTime};
 use libcrypt::base64;
 use libcrypt::encrypt::Encryptable;
 use libcrypt::decrypt::Decryptable;
+use libcrypt::Mode::{self, ENCRYPT, DECRYPT};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let (_mode, src, dest, key) = if args.len() == 5 {
-        (&args[1], &args[2], &args[3], args[4].trim().to_string().into_bytes())
+    let (mode, input, output) = (Mode::from(&args[1]), &args[2].trim_end_matches('/'), &args[3].trim_end_matches('/'));
+    let key = if args.len() == 5 {
+        args[4].trim().to_string().into_bytes()
     } else {
         let mut key = String::new();
         println!("Enter crypt key: ");
         io::stdin().read_line(&mut key).expect("failed to read key input");
         println!("\u{1b}[F{}", String::from_utf8(vec![0x20; key.len()]).unwrap());
 
-        (&args[1], &args[2], &args[3], key.into_bytes())
+        key.into_bytes()
     };
     let mut dir = HashMap::<String, (u128, bool)>::new();
     let mut dirt = 0;
 
     println!("daemon starting");
 
-    fs::create_dir(dest);
+    let (mode, clear, crypt) = match mode {
+        Some(ENCRYPT) => (ENCRYPT, input, output),
+        Some(DECRYPT) | None => {
+            (DECRYPT, output, input)
+        },
+    };
+
+    let (clear, crypt) = match mode {
+        DECRYPT => {
+            for f in fs::read_dir(&clear).expect("failed to read encrypted directory") {
+                let f = f.unwrap().path();
+                // gets path to the file
+                let path = match f.to_str() {
+                    Some(path) => path.to_string(),
+                    None => continue
+                };
+                // gets file name
+                let file = path.rsplit('/').collect::<Vec<&str>>()[0].to_string();
+
+                // let name = String::from_utf8(base64::decode(&file).decrypt(&key)).unwrap();
+                let name = String::from_utf8(base64::decode(&file)).unwrap();
+                let (input, output) = (format!("{}/{}", clear, file), format!("{}/{}", crypt, name));
+
+                let mut contents = fs::read(&input).expect("failed to open file for reading");
+                contents = contents.decrypt(&key);
+                fs::write(output, contents).expect("failed to write to output file");
+            }
+            (crypt, clear)
+        },
+        _ => (clear, crypt)
+    };
 
     loop {
-        match fs::metadata(&src) {
+        match fs::metadata(&clear) {
             Ok(data) => {
                 let dt = data.modified().unwrap().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
                 if dirt < dt {
@@ -42,7 +74,7 @@ fn main() {
             Err(_) => {}
         }
         // only checks files owner by current user with open read access
-        for f in fs::read_dir(&src).expect("failed to read source directory") {
+        for f in fs::read_dir(&clear).expect("failed to read cleartext directory") {
             let f = f.unwrap().path();
             // gets path to the file
             let path = match f.to_str() {
@@ -50,7 +82,7 @@ fn main() {
                 None => continue
             };
             // gets file name
-            let file = path.rsplit('/').collect::<Vec<&str>>()[0];
+            let file = path.rsplit('/').collect::<Vec<&str>>()[0].to_string();
             // gets metadata of files
             let meta = match fs::metadata(&path) {
                 Ok(data) => data,
@@ -62,21 +94,11 @@ fn main() {
                 match dir.get(&path) {
                     Some((v, _)) => {
                         if v < &t {
-                            // println!("{} -> {}", path, t);
-                            dir.insert(path, (t, false));
+                            dir.insert(file, (t, false));
                         }
                     },
                     None => {
-                        // println!("{} : {}", path, t);
-                        let name = base64::encode(file.as_bytes().to_vec().encrypt(&key.to_vec())).replace("=", "");
-                        let (input, output) = (format!("{}/{}", src, file), format!("{}/{}", dest, name));
-                        println!("\nfrom {}{}", src, file);
-                        println!("to {}{}", dest, name);
-                        let mut contents = fs::read(input).expect("failed to open file for reading");
-                        contents = contents.encrypt(&key);
-                        fs::write(output, contents).expect("failed to write to output file");
-
-                        dir.insert(file.to_string(), (t, false));
+                        dir.insert(file, (t, false));
                     }
                 }
             } else {
@@ -85,14 +107,25 @@ fn main() {
         }
 
         for f in dir.clone() {
-            let (p, (t, e)) = f;
-            if !e {
-                // println!("recrypting {}", p);
-                dir.insert(p, (t, true));
+            let (file, (time, encrypted)) = f;
+            if !encrypted {
+                // let name = base64::encode(&file.as_bytes().to_vec().encrypt(&key.to_vec())).replace("=", "");
+                let name = base64::encode(&file.as_bytes().to_vec()).replace("=", "");
+                let (input, output) = (format!("{}/{}", clear, file), format!("{}/{}", crypt, name));
+
+                let mut contents = fs::read(&input).expect("failed to open file for reading");
+                contents = contents.encrypt(&key);
+                fs::write(output, contents).expect("failed to write to output file");
+
+                dir.insert(file, (time, true));
             } else {
-                match fs::metadata(&p) {
+                match fs::metadata(format!("{}/{}", clear, file)) {
                     Ok(_) => (),
-                    Err(_) => println!("{} -X", p)
+                    Err(_) => {
+                        // let name = base64::encode(&file.as_bytes().to_vec().encrypt(&key.to_vec())).replace("=", "");
+                        let name = base64::encode(&file.as_bytes().to_vec()).replace("=", "");
+                        fs::remove_file(format!("{}/{}", crypt, name));
+                    }
                 }
             }
         }
