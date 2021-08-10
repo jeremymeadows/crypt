@@ -10,8 +10,8 @@ impl Mode {
     }
 }
 
-pub mod argparser;
 pub mod base64;
 pub mod encrypt;
 pub mod decrypt;
 pub mod random;
+pub mod read_hidden;

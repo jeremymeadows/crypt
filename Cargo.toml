@@ -8,6 +8,7 @@ default-run = "crypt"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+libc = "0.2.0"
 
 [lib]
 name = "libcrypt"
@@ -22,13 +23,6 @@ name = "cryptd"
 path = "src/bin/daemon.rs"
 
 [[bin]]
-name = "argparser"
-path = "src/lib/argparser.rs"
+name = "test"
+path = "src/bin/test.rs"
 
-[[bin]]
-name = "rand"
-path = "src/bin/rand.rs"
-
-[[test]]
-name = "tests"
-path = "src/tests/tests.rs"

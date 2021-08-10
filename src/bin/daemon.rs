@@ -124,7 +124,7 @@ fn main() {
                     Err(_) => {
                         // let name = base64::encode(&file.as_bytes().to_vec().encrypt(&key.to_vec())).replace("=", "");
                         let name = base64::encode(&file.as_bytes().to_vec()).replace("=", "");
-                        fs::remove_file(format!("{}/{}", crypt, name));
+                        fs::remove_file(format!("{}/{}", crypt, name)).unwrap();
                     }
                 }
             }
