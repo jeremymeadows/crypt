@@ -1,18 +1,17 @@
 /* Psuedo-Random Number Generator
     Uses the Mercenne-Twister algorithm to generate PRNs
 */
-use std::num::Wrapping;
+
+pub struct Generator {
+    state: Vec<u64>,
+    next: usize,
+}
 
 static NN: usize = 312;
 static MM: usize = 156;
 const MATRIX_A: u64 = 0xB5026F5AA96619E9;
 const UM: u64 = 0xFFFFFFFF80000000;
 const LM: u64 = 0x7FFFFFFF;
-
-pub struct Generator {
-    state: Vec<u64>,
-    next: usize,
-}
 
 impl Default for Generator {
     fn default() -> Self {
@@ -63,7 +62,7 @@ impl Generator {
     pub fn seed(&mut self, seed: u64) {
         self.state[0] = seed;
         for i in 1..NN {
-            self.state[i] = (Wrapping(6364136223846793005) * Wrapping(self.state[i-1] ^ (self.state[i-1] >> 62)) + Wrapping(i as u64)).0;
+            self.state[i] = 6364136223846793005u64.wrapping_mul(self.state[i-1] ^ (self.state[i-1] >> 62)).wrapping_add(i as u64);
         }
         self.next = NN;
     }

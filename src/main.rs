@@ -1,8 +1,6 @@
-use std::{io, env, fs};
-use std::process;
+use std::{io, env, fs, process};
 
-use libcrypt::encrypt::Encryptable;
-use libcrypt::decrypt::Decryptable;
+use libcrypt::chacha::{Encryptable, Decryptable};
 use libcrypt::Mode::{self, ENCRYPT, DECRYPT};
 use libcrypt::read_hidden::Input;
 
@@ -153,10 +151,7 @@ fn main() -> io::Result<()> {
                         data = fs::read(format!("{}/{}", &input, meta[line]))?.decrypt(&key);
 
                         match file.rfind('/') {
-                            Some(i) => {
-                                //let dir = format!("{}/{}", &temp_out, file[0..i]);
-                                fs::create_dir_all(format!("{}/{}", &temp_out, file[0..i].to_string()))?;
-                            },
+                            Some(i) => fs::create_dir_all(format!("{}/{}", &temp_out, file[0..i].to_string()))?,
                             None => (),
                         };
 

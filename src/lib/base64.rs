@@ -64,7 +64,7 @@ mod test {
             let (s, e) = TESTS[i];
 
             println!("encoding '{}'", s);
-            assert_eq!(encode(&Vec::from(s.as_bytes())).as_str(), e);
+            assert_eq!(encode(&Vec::from(s)), e);
         }
     }
 
@@ -74,7 +74,7 @@ mod test {
             let (s, e) = TESTS[i];
 
             println!("decoding '{}'", s);
-            assert_eq!(decode(&String::from(e)), Vec::from(s.as_bytes()));
+            assert_eq!(decode(&String::from(e)), Vec::from(s));
         }
     }
 
@@ -84,8 +84,8 @@ mod test {
             let (s, e) = TESTS[i];
 
             println!("testing '{}'", s);
-            assert_eq!(encode(&decode(&String::from(e))).as_str(), e);
-            assert_eq!(decode(&encode(&Vec::from(s.as_bytes()))), Vec::from(s.as_bytes()));
+            assert_eq!(encode(&decode(&String::from(e))), e);
+            assert_eq!(decode(&encode(&Vec::from(s))), Vec::from(s));
         }
     }
 }
