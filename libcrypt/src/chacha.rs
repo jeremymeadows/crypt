@@ -1,9 +1,10 @@
-/* ChaCha symmetric encryption algorithm
-    Uses the ChaCha20 stream cipher to encrypt data
-*/
+//! Implementation for the ChaCha20 symmetric stream cipher.
 
 use std::cmp;
 
+const CONSTANTS: [u32; 4] = [0x61707865, 0x3320646E, 0x79622D32, 0x6B206574];
+
+/// A ChaCha symmetric stream cipher.
 pub struct ChaCha {
     state: [u32; 16],
     key: [u32; 8],
@@ -11,46 +12,33 @@ pub struct ChaCha {
     nonce: [u32; 3],
 }
 
-const CONSTANTS: [u32; 4] = [0x61707865, 0x3320646E, 0x79622D32, 0x6B206574];
-
-pub trait Encryptable {
-    fn encrypt(&self, key: &Vec<u8>) -> Vec<u8>;
-}
-pub trait Decryptable {
-    fn decrypt(&self, key: &Vec<u8>) -> Vec<u8>;
-}
-
-impl Encryptable for Vec<u8> {
-    fn encrypt(&self, key: &Vec<u8>) -> Vec<u8> {
-        let mut cc = ChaCha::new(key);
-        cc.encrypt(&self.clone())
-    }
-}
-impl Decryptable for Vec<u8> {
-    fn decrypt(&self, key: &Vec<u8>) -> Vec<u8> {
-        let mut cc = ChaCha::new(key);
-        cc.decrypt(&self.clone())
-    }
-}
-
 impl ChaCha {
+    /// Creates a new ChaCha cipher from the given key.
     pub fn new(key: &Vec<u8>) -> Self {
         Self::from_state(key, 1, [0x00000000, 0x00000000, 0x00000000])
     }
 
+    /// Creates a new ChaCha cipher from the given key, also setting the current state of the
+    /// counter and the values of the nonce.
     pub fn from_state(key: &Vec<u8>, counter: u32, nonce: [u32; 3]) -> Self {
         let key = ChaCha::expand_key(&mut key.clone());
 
-        Self {
+        let mut cc = Self {
             state: [0; 16],
             key: key,
             counter: counter,
             nonce: nonce,
-        }
+        };
+
+        cc.state = cc.calc_state();
+        cc
     }
 
     fn expand_key(key: &mut Vec<u8>) -> [u32; 8] {
         let mut a = [0u32; 8];
+        while key.len() < 32 {
+            key.append(&mut key.clone());
+        }
         key.resize(32, 0);
 
         for i in 0..a.len() {
@@ -71,32 +59,32 @@ impl ChaCha {
     }
 
     fn quarter_round(&mut self, a: usize, b: usize, c: usize, d: usize) {
-        self.state[a]  = self.state[a].wrapping_add(self.state[b]);
-        self.state[d]  = (self.state[d] ^ self.state[a]).rotate_left(16);
+        self.state[a] = self.state[a].wrapping_add(self.state[b]);
+        self.state[d] = (self.state[d] ^ self.state[a]).rotate_left(16);
 
-        self.state[c]  = self.state[c].wrapping_add(self.state[d]);
-        self.state[b]  = (self.state[b] ^ self.state[c]).rotate_left(12);
+        self.state[c] = self.state[c].wrapping_add(self.state[d]);
+        self.state[b] = (self.state[b] ^ self.state[c]).rotate_left(12);
 
-        self.state[a]  = self.state[a].wrapping_add(self.state[b]);
-        self.state[d]  = (self.state[d] ^ self.state[a]).rotate_left(8);
+        self.state[a] = self.state[a].wrapping_add(self.state[b]);
+        self.state[d] = (self.state[d] ^ self.state[a]).rotate_left(8);
 
-        self.state[c]  = self.state[c].wrapping_add(self.state[d]);
-        self.state[b]  = (self.state[b] ^ self.state[c]).rotate_left(7);
+        self.state[c] = self.state[c].wrapping_add(self.state[d]);
+        self.state[b] = (self.state[b] ^ self.state[c]).rotate_left(7);
     }
 
     fn block_round(&mut self) {
         let old_state = self.state.clone();
 
         for _ in 0..10 {
-            self.quarter_round(0, 4,  8, 12);
-            self.quarter_round(1, 5,  9, 13);
+            self.quarter_round(0, 4, 8, 12);
+            self.quarter_round(1, 5, 9, 13);
             self.quarter_round(2, 6, 10, 14);
             self.quarter_round(3, 7, 11, 15);
 
             self.quarter_round(0, 5, 10, 15);
             self.quarter_round(1, 6, 11, 12);
-            self.quarter_round(2, 7,  8, 13);
-            self.quarter_round(3, 4,  9, 14);
+            self.quarter_round(2, 7, 8, 13);
+            self.quarter_round(3, 4, 9, 14);
         }
 
         for i in 0..self.state.len() {
@@ -116,6 +104,7 @@ impl ChaCha {
         v
     }
 
+    /// Encrypts the given plaintext, returning the ciphertext.
     pub fn encrypt(&mut self, plaintext: &Vec<u8>) -> Vec<u8> {
         let mut ciphertext = Vec::<u8>::new();
         let mut ndx = 0;
@@ -136,6 +125,7 @@ impl ChaCha {
         ciphertext
     }
 
+    /// Decrypts the given ciphertext, returning the plaintext.
     pub fn decrypt(&mut self, plaintext: &Vec<u8>) -> Vec<u8> {
         self.encrypt(plaintext)
     }
@@ -143,7 +133,7 @@ impl ChaCha {
 
 #[cfg(test)]
 pub mod test {
-    use crate::chacha::*;
+    use super::*;
 
     #[test]
     fn test_quarter_round() {
@@ -168,7 +158,16 @@ pub mod test {
 
     #[test]
     fn test_block_round() {
-        let mut cc = ChaCha::new(&vec![0]);
+        let mut cc = ChaCha::from_state(
+            &vec![
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+            ],
+            0x00000001,
+            [0x09000000, 0x4a000000, 0x00000000],
+        );
         let exp = [
             0xe4e7f110, 0x15593bd1, 0x1fdd0f50, 0xc47120a3,
             0xc7f4d1c7, 0x0368c033, 0x9aaa2204, 0x4e6cd4c3,
@@ -176,25 +175,50 @@ pub mod test {
             0xd19c12b5, 0xb94e16de, 0xe883d0cb, 0x4e3c50a2,
         ];
 
-        cc.state = [
-            0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
-            0x03020100, 0x07060504, 0x0b0a0908, 0x0f0e0d0c,
-            0x13121110, 0x17161514, 0x1b1a1918, 0x1f1e1d1c,
-            0x00000001, 0x09000000, 0x4a000000, 0x00000000,
-        ];
         cc.block_round();
 
         assert_eq!(cc.state, exp);
     }
 
     #[test]
+    fn test_serialize() {
+        let mut cc = ChaCha::from_state(
+            &vec![
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+            ],
+            0x00000001,
+            [0x09000000, 0x4a000000, 0x00000000],
+        );
+        let exp = [
+            0x10, 0xf1, 0xe7, 0xe4, 0xd1, 0x3b, 0x59, 0x15,
+            0x50, 0x0f, 0xdd, 0x1f, 0xa3, 0x20, 0x71, 0xc4,
+            0xc7, 0xd1, 0xf4, 0xc7, 0x33, 0xc0, 0x68, 0x03,
+            0x04, 0x22, 0xaa, 0x9a, 0xc3, 0xd4, 0x6c, 0x4e,
+            0xd2, 0x82, 0x64, 0x46, 0x07, 0x9f, 0xaa, 0x09,
+            0x14, 0xc2, 0xd7, 0x05, 0xd9, 0x8b, 0x02, 0xa2,
+            0xb5, 0x12, 0x9c, 0xd1, 0xde, 0x16, 0x4e, 0xb9,
+            0xcb, 0xd0, 0x83, 0xe8, 0xa2, 0x50, 0x3c, 0x4e,
+        ];
+
+        cc.block_round();
+
+        assert_eq!(cc.serialize(), exp);
+    }
+
+    #[test]
     fn test_encrypt() {
-        let mut cc = ChaCha::from_state(&vec![
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-            0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-            0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f ],
-            0x00000001, [0x00000000, 0x4a000000, 0x00000000],
+        let mut cc = ChaCha::from_state(
+            &vec![
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+            ],
+            0x00000001,
+            [0x00000000, 0x4a000000, 0x00000000],
         );
 
         let plaintext = "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
@@ -221,12 +245,15 @@ pub mod test {
 
     #[test]
     fn test_decrypt() {
-        let mut cc = ChaCha::from_state(&vec![
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-            0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-            0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f ],
-            0x00000001, [0x00000000, 0x4a000000, 0x00000000],
+        let mut cc = ChaCha::from_state(
+            &vec![
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+            ],
+            0x00000001,
+            [0x00000000, 0x4a000000, 0x00000000],
         );
 
         let plaintext = "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
@@ -249,5 +276,25 @@ pub mod test {
         ];
 
         assert_eq!(cc.decrypt(&Vec::from(ciphertext)), Vec::from(plaintext));
+    }
+
+    #[test]
+    fn test_repeated_encrypt() {
+        let mut cc = ChaCha::new(&Vec::from("super_secret_key"));
+        let plain = [
+            "foo",
+            "Hello, world!",
+            "The quick brown fox jumped over the lazy dog",
+        ];
+        let mut cipher = Vec::new();
+
+        for s in plain {
+            cipher.push(cc.encrypt(&Vec::from(s)));
+        }
+
+        cc = ChaCha::new(&Vec::from("super_secret_key"));
+        for i in 0..(plain.len()) {
+            assert_eq!(cc.decrypt(&cipher[i]), Vec::from(plain[i]));
+        }
     }
 }

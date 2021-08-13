@@ -1,23 +1,26 @@
-/* Psuedo-Random Number Generator
-    Uses the Mercenne-Twister algorithm to generate PRNs
-*/
+//! Implementation for the Mersenne-Twister pseudo-random number generator.
 
+const STATE_SIZE: usize = 312;
+const HALF_SIZE: usize = STATE_SIZE / 2;
+
+const MAGIC: u64 = 0xB5026F5AA96619E9;
+
+const UPPER: u64 = 0xFFFFFFFF80000000;
+const LOWER: u64 = 0x7FFFFFFF;
+
+/// A Mersenne Twister pseudo-random number generator
 pub struct Generator {
-    state: Vec<u64>,
+    state: [u64; STATE_SIZE],
     next: usize,
 }
 
-static NN: usize = 312;
-static MM: usize = 156;
-const MATRIX_A: u64 = 0xB5026F5AA96619E9;
-const UM: u64 = 0xFFFFFFFF80000000;
-const LM: u64 = 0x7FFFFFFF;
-
 impl Default for Generator {
+    /// Creates a new generator seeded with its memory address. Useful to get a
+    /// non-deterministic seed value.
     fn default() -> Self {
         let mut gen = Self {
-            state: vec![0; NN],
-            next: NN+1,
+            state: [0; STATE_SIZE],
+            next: STATE_SIZE + 1,
         };
 
         gen.seed(&gen as *const Self as u64);
@@ -26,21 +29,24 @@ impl Default for Generator {
 }
 
 impl From<u64> for Generator {
+    /// Creates a new generator with a seed value.
     fn from(seed: u64) -> Self {
         let mut gen = Self {
-            state: vec![0; NN],
-            next: NN+1,
+            state: [0; STATE_SIZE],
+            next: STATE_SIZE + 1,
         };
 
         gen.seed(seed);
         gen
     }
 }
+
 impl From<&Vec<u8>> for Generator {
+    /// Creates a new generator seeded with a key.
     fn from(key: &Vec<u8>) -> Self {
         let mut gen = Self {
-            state: vec![0; NN],
-            next: NN+1,
+            state: [0; STATE_SIZE],
+            next: STATE_SIZE + 1,
         };
 
         gen.seed_with_key(key);
@@ -49,55 +55,62 @@ impl From<&Vec<u8>> for Generator {
 }
 
 impl Generator {
+    /// Creates a new generator.
     pub fn new() -> Self {
         let mut gen = Generator {
-            state: vec![0; NN],
-            next: NN+1,
+            state: [0; STATE_SIZE],
+            next: STATE_SIZE + 1,
         };
 
         gen.seed(5489);
         gen
     }
 
+    /// Seeds the generator with a new value and resets the internal state.
     pub fn seed(&mut self, seed: u64) {
         self.state[0] = seed;
-        for i in 1..NN {
-            self.state[i] = 6364136223846793005u64.wrapping_mul(self.state[i-1] ^ (self.state[i-1] >> 62)).wrapping_add(i as u64);
+        for i in 1..STATE_SIZE {
+            self.state[i] = 6364136223846793005u64
+                .wrapping_mul(self.state[i - 1] ^ (self.state[i - 1] >> 62))
+                .wrapping_add(i as u64);
         }
-        self.next = NN;
+        self.next = STATE_SIZE;
     }
 
+    /// Seeds the generator with a key and resets the internal state.
     pub fn seed_with_key(&mut self, key: &Vec<u8>) {
         let mut x = 0;
 
         for i in key {
             let i = *i as u64;
             self.seed(i + x);
-            x = self.state[i as usize % NN];
+            x = self.state[i as usize % STATE_SIZE];
         }
     }
 
-    // generates the next state based off the previous one
     fn twist(&mut self) {
         let mut x;
-        let magic = [0, MATRIX_A];
+        let magic = [0, MAGIC];
 
-        for i in 0..(NN-MM) {
-            x = (self.state[i]&UM)|(self.state[i+1]&LM);
-            self.state[i] = self.state[i+MM] ^ (x >> 1) ^ magic[(x & 1) as usize];
+        for i in 0..(HALF_SIZE) {
+            x = (self.state[i] & UPPER) | (self.state[i + 1] & LOWER);
+            self.state[i] = self.state[i + HALF_SIZE] ^ (x >> 1) ^ magic[(x & 1) as usize];
         }
-        let mn = MM as isize - NN as isize;
-        for i in (NN-MM)..(NN-1) {
-            x = (self.state[i]&UM)|(self.state[i+1]&LM);
-            self.state[i] = self.state[(i as isize+mn) as usize] ^ (x >> 1) ^ magic[(x & 1) as usize];
+
+        for i in (HALF_SIZE)..(STATE_SIZE - 1) {
+            x = (self.state[i] & UPPER) | (self.state[i + 1] & LOWER);
+            self.state[i] = self.state[(i.wrapping_sub(HALF_SIZE) as isize) as usize]
+                ^ (x >> 1)
+                ^ magic[(x & 1) as usize];
         }
-        x = (self.state[NN-1]&UM)|(self.state[0]&LM);
-        self.state[NN-1] = self.state[MM-1] ^ (x >> 1) ^ magic[(x & 1) as usize];
+
+        x = (self.state[STATE_SIZE - 1] & UPPER) | (self.state[0] & LOWER);
+        self.state[STATE_SIZE - 1] = self.state[HALF_SIZE - 1] ^ (x >> 1) ^ magic[(x & 1) as usize];
     }
 
-    // regenerates the state if its out of new values, then returns the tempered next value 
+    /// Returns the next value and regenerates the state if needed.
     pub fn next(&mut self) -> u64 {
-        if self.next >= NN {
+        if self.next >= STATE_SIZE {
             self.twist();
             self.next = 0;
         }
@@ -113,13 +126,16 @@ impl Generator {
         x
     }
 
-    // a real number with a range of 0..=1
+    /// Returns a real number from `0..=1` and regenerates the state if needed.
     pub fn next_real(&mut self) -> f64 {
         (self.next() >> 11) as f64 * (1.0 / 0x1fffffffffffffu64 as f64)
     }
 
-    // will lose bytes if n is not a multiple of 8.
-    // eg. `get_bytes(4); get_bytes(4)` will yield different values from `get_bytes(8)`
+    /// Get a Vec filled with `n` random bytes.
+    ///
+    /// Note that bytes will be dropped if `n` is not a multiple of 8 (eg.
+    /// `get_bytes(4); get_bytes(4)` will yield different results that
+    /// `get_bytes(8)`).
     pub fn get_bytes(&mut self, n: usize) -> Vec<u8> {
         let mut v = Vec::<u8>::new();
         let mut x = self.next();
@@ -140,10 +156,11 @@ impl Generator {
 
 #[cfg(test)]
 mod tests {
-    use crate::random::*;
+    use super::*;
 
     #[test]
     fn test_new() {
+        let mut gen = Generator::new();
         let exp = [
             14514284786278117030,
              4620546740167642908,
@@ -157,7 +174,6 @@ mod tests {
              6358044926049913402,
         ];
 
-        let mut gen = Generator::new();
         for i in 0..10 {
             assert_eq!(gen.next(), exp[i]);
         }
@@ -173,6 +189,7 @@ mod tests {
 
     #[test]
     fn test_seed() {
+        let mut gen = Generator::from(0xff);
         let exp = [
              3220586997909315655,
              3303451203970382242,
@@ -186,12 +203,12 @@ mod tests {
             15474158341220671739,
         ];
 
-        let mut gen = Generator::from(0xff);
         for i in 0..10 {
             assert_eq!(gen.next(), exp[i]);
         }
 
         gen.seed(0xff);
+
         for i in 0..10 {
             assert_eq!(gen.next(), exp[i]);
         }
@@ -199,6 +216,7 @@ mod tests {
 
     #[test]
     fn test_real() {
+        let mut gen = Generator::new();
         let exp = [
             0.7868209548678021,
             0.2504803406880287,
@@ -211,9 +229,9 @@ mod tests {
             0.5206431525734918,
             0.3446703060791877,
         ];
+
         let err = 0.0000000000000001;
 
-        let mut gen = Generator::new();
         for i in 0..10 {
             assert!(gen.next_real() - exp[i] < err);
         }
@@ -221,27 +239,12 @@ mod tests {
 
     #[test]
     fn test_bytes() {
-        let exp = [
-            // 14514284786278117030 -> C96D_191C_F6F6_AEA6
-            // 4620546740167642908  -> 401F_7AC7_8BC8_0F1C
-            // 13109570281517897720 -> B5EE_8CB6_ABE4_57F8
-            0xA6,
-            0xAE,
-            0xF6,
-            0xF6,
-            0x1C,
-            0x19,
-            0x6D,
-            0xC9,
-
-            0x1C,
-
-            0xF8,
-        ];
-
         let mut gen = Generator::new();
+        let exp = [0xA6, 0xAE, 0xF6, 0xF6, 0x1C, 0x19, 0x6D, 0xC9, 0x1C, 0xF8];
+
         let mut v = gen.get_bytes(9);
         v.append(&mut gen.get_bytes(1));
+
         for i in 0..10 {
             assert_eq!(v[i], exp[i]);
         }

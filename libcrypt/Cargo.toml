@@ -1,8 +1,8 @@
 [package]
-name = "crypt"
+name = "libcrypt"
 version = "1.0.0"
 authors = ["Jeremy Meadows <jeremybmeadows@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-libcrypt = { path = "libcrypt" }
+libc = "0.2"
