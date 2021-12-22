@@ -6,15 +6,15 @@ const HALF_SIZE: usize = STATE_SIZE / 2;
 const MAGIC: u64 = 0xB5026F5AA96619E9;
 
 const UPPER: u64 = 0xFFFFFFFF80000000;
-const LOWER: u64 = 0x7FFFFFFF;
+const LOWER: u64 = 0x000000007FFFFFFF;
 
 /// A Mersenne Twister pseudo-random number generator
-pub struct Generator {
+pub struct MersenneTwister {
     state: [u64; STATE_SIZE],
     next: usize,
 }
 
-impl Default for Generator {
+impl Default for MersenneTwister {
     /// Creates a new generator seeded with its memory address. Useful to get a
     /// non-deterministic seed value.
     fn default() -> Self {
@@ -28,7 +28,7 @@ impl Default for Generator {
     }
 }
 
-impl From<u64> for Generator {
+impl From<u64> for MersenneTwister {
     /// Creates a new generator with a seed value.
     fn from(seed: u64) -> Self {
         let mut gen = Self {
@@ -41,7 +41,7 @@ impl From<u64> for Generator {
     }
 }
 
-impl From<&Vec<u8>> for Generator {
+impl From<&Vec<u8>> for MersenneTwister {
     /// Creates a new generator seeded with a key.
     fn from(key: &Vec<u8>) -> Self {
         let mut gen = Self {
@@ -54,10 +54,10 @@ impl From<&Vec<u8>> for Generator {
     }
 }
 
-impl Generator {
+impl MersenneTwister {
     /// Creates a new generator.
     pub fn new() -> Self {
-        let mut gen = Generator {
+        let mut gen = MersenneTwister {
             state: [0; STATE_SIZE],
             next: STATE_SIZE + 1,
         };
@@ -121,7 +121,7 @@ impl Generator {
         x ^= (x >> 29) & 0x5555555555555555;
         x ^= (x << 17) & 0x71D67FFFEDA60000;
         x ^= (x << 37) & 0xFFF7EEE000000000;
-        x ^=  x >> 43;
+        x ^= x >> 43;
 
         x
     }
@@ -160,18 +160,18 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let mut gen = Generator::new();
+        let mut gen = MersenneTwister::new();
         let exp = [
             14514284786278117030,
-             4620546740167642908,
+            04620546740167642908,
             13109570281517897720,
             17462938647148434322,
-              355488278567739596,
-             7469126240319926998,
-             4635995468481642529,
-              418970542659199878,
-             9604170989252516556,
-             6358044926049913402,
+            00355488278567739596,
+            07469126240319926998,
+            04635995468481642529,
+            00418970542659199878,
+            09604170989252516556,
+            06358044926049913402,
         ];
 
         for i in 0..10 {
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn test_default() {
-        let mut gen = Generator::default();
+        let mut gen = MersenneTwister::default();
         for _ in 0..10 {
             gen.next();
         }
@@ -189,15 +189,15 @@ mod tests {
 
     #[test]
     fn test_seed() {
-        let mut gen = Generator::from(0xff);
+        let mut gen = MersenneTwister::from(0xff);
         let exp = [
-             3220586997909315655,
-             3303451203970382242,
+            03220586997909315655,
+            03303451203970382242,
             11896436706893466529,
-             8960318650144385956,
-             4679212705770455613,
+            08960318650144385956,
+            04679212705770455613,
             15567843309247195414,
-             6961994097256010468,
+            06961994097256010468,
             10807484256991480663,
             11890420171946432686,
             15474158341220671739,
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn test_real() {
-        let mut gen = Generator::new();
+        let mut gen = MersenneTwister::new();
         let exp = [
             0.7868209548678021,
             0.2504803406880287,
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_bytes() {
-        let mut gen = Generator::new();
+        let mut gen = MersenneTwister::new();
         let exp = [0xA6, 0xAE, 0xF6, 0xF6, 0x1C, 0x19, 0x6D, 0xC9, 0x1C, 0xF8];
 
         let mut v = gen.get_bytes(9);

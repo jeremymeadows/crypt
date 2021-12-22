@@ -1,7 +1,7 @@
 use std::{env, fs, io, process};
 
 use libcrypt::chacha::ChaCha;
-use libcrypt::mersenne_twister::Generator;
+use libcrypt::mersenne_twister::MersenneTwister;
 use libcrypt::stdin_extras::Input;
 
 fn help() -> ! {
@@ -44,12 +44,11 @@ fn main() -> io::Result<()> {
 
     let key = io::stdin().input_hidden("Enter Crypt key:")?.into_bytes();
 
-    let mut gen = Generator::from(&key);
-    let mut cc = ChaCha::from_state(
-        &key,
-        0,
-        [gen.next() as u32, gen.next() as u32, gen.next() as u32],
-    );
+    let mut gen = MersenneTwister::from(&key);
+    let mut cc = ChaCha::new(
+        &key)
+        .with_counter(0)
+        .with_nonce([gen.next() as u32, gen.next() as u32, gen.next() as u32]);
 
     match fs::metadata(&input)?.is_file() {
         true => {
