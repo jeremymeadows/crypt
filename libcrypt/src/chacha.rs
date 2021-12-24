@@ -13,20 +13,64 @@ pub struct ChaCha {
     nonce: [u32; 3],
 }
 
-trait Key {
+pub trait Key {
+    fn expand(&self) -> [u32; 8];
+}
+
+impl Key for &[u32] {
     fn expand(&self) -> [u32; 8] {
-        todo!()
+        let mut k = [0; 8];
+        for (a, b) in k.iter_mut().zip(self.iter()) {
+            *a += b;
+        }
+        k
     }
 }
 
-pub struct ChaChaRng(ChaCha);
+impl Key for &[i32] {
+    fn expand(&self) -> [u32; 8] {
+        let mut k = [0; 8];
+        for (a, b) in k.iter_mut().zip(self.iter()) {
+            *a += *b as u32;
+        }
+        k
+    }
+}
+
+impl Key for &[u8] {
+    fn expand(&self) -> [u32; 8] {
+        self.iter()
+            .map(|e| format!("{:02x}", e))
+            .collect::<Vec<_>>()
+            .chunks(4)
+            .map(|e| {
+                u32::from_str_radix(&e.iter().rev().cloned().collect::<Vec<_>>().concat(), 16)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>()
+            .as_slice()
+            .expand()
+    }
+}
+
+impl Key for &Vec<u8> {
+    fn expand(&self) -> [u32; 8] {
+        self.as_slice().expand()
+    }
+}
+
+impl Key for &str {
+    fn expand(&self) -> [u32; 8] {
+        self.as_bytes().expand()
+    }
+}
 
 impl ChaCha {
     /// Creates a new ChaCha cipher from the given key.
-    pub fn new(key: &[u8]) -> Self {
+    pub fn new<T: Key>(key: T) -> Self {
         let mut cc = ChaCha {
             state: [0; 16],
-            key: Self::expand_key(key),
+            key: key.expand(),
             counter: 1,
             nonce: [0; 3],
         };
@@ -44,32 +88,18 @@ impl ChaCha {
         }
     }
 
+    /// Sets the initial counter value for the ChaCha cipher
     pub fn with_counter(mut self, counter: u32) -> Self {
         self.counter = counter;
         self.calc_state();
         self
     }
 
+    /// Sets the nonce for the ChaCha cipher
     pub fn with_nonce(mut self, nonce: [u32; 3]) -> Self {
         self.nonce = nonce;
         self.calc_state();
         self
-    }
-
-    fn expand_key(key: &[u8]) -> [u32; 8] {
-        let mut key = Vec::from(key);
-        let mut a = [0u32; 8];
-        while key.len() < 32 {
-            key.append(&mut key.clone());
-        }
-        key.resize(32, 0);
-
-        for i in 0..a.len() {
-            for j in (0..4).rev() {
-                a[i] |= (key[(i * 4) + j] as u32) << (j * 8);
-            }
-        }
-        a
     }
 
     fn calc_state(&mut self) {
@@ -166,32 +196,15 @@ impl ChaCha {
     }
 }
 
-impl ChaChaRng {
-    pub fn new() -> ChaChaRng {
-        ChaChaRng(ChaCha::new(&[0; 32]))
-    }
-    pub fn from_seed(seed: [u8; 32]) -> ChaChaRng {
-        ChaChaRng(ChaCha::new(&seed).with_counter(0))
-    }
-
-    pub fn next_u32(&mut self) -> u32 {
-        let x = self.0.encrypt(&[0; 4]);
-        (x[0] as u32) << 24 | (x[1] as u32) << 16 | (x[2] as u32) << 8 | (x[3] as u32)
-    }
-    pub fn next_u64(&mut self) -> u64 {
-        todo!()
-    }
-    // pub fn fill_bytes(&mut buf: &mut [u8]) {
-    //     todo!()
-    // }
-    pub fn get_bytes(&mut self, n: usize) -> Vec<u8> {
-        todo!()
-    }
-}
-
 #[cfg(test)]
 pub mod test {
     use super::*;
+
+    static KEY: &[u8] = &[
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+        0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
+        0x1e, 0x1f,
+    ];
 
     #[test]
     fn test_quarter_round() {
@@ -213,13 +226,9 @@ pub mod test {
 
     #[test]
     fn test_block_round() {
-        let mut cc = ChaCha::new(&[
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
-            0x1c, 0x1d, 0x1e, 0x1f,
-        ])
-        .with_counter(0x00000001)
-        .with_nonce([0x09000000, 0x4a000000, 0x00000000]);
+        let mut cc = ChaCha::new(KEY)
+            .with_counter(0x00000001)
+            .with_nonce([0x09000000, 0x4a000000, 0x00000000]);
         let exp = [
             0xe4e7f110, 0x15593bd1, 0x1fdd0f50, 0xc47120a3, 0xc7f4d1c7, 0x0368c033, 0x9aaa2204,
             0x4e6cd4c3, 0x466482d2, 0x09aa9f07, 0x05d7c214, 0xa2028bd9, 0xd19c12b5, 0xb94e16de,
@@ -233,13 +242,9 @@ pub mod test {
 
     #[test]
     fn test_serialize() {
-        let mut cc = ChaCha::new(&[
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
-            0x1c, 0x1d, 0x1e, 0x1f,
-        ])
-        .with_counter(0x00000001)
-        .with_nonce([0x09000000, 0x4a000000, 0x00000000]);
+        let mut cc = ChaCha::new(KEY)
+            .with_counter(0x00000001)
+            .with_nonce([0x09000000, 0x4a000000, 0x00000000]);
         let exp = [
             0x10, 0xf1, 0xe7, 0xe4, 0xd1, 0x3b, 0x59, 0x15, 0x50, 0x0f, 0xdd, 0x1f, 0xa3, 0x20,
             0x71, 0xc4, 0xc7, 0xd1, 0xf4, 0xc7, 0x33, 0xc0, 0x68, 0x03, 0x04, 0x22, 0xaa, 0x9a,
@@ -255,13 +260,9 @@ pub mod test {
 
     #[test]
     fn test_encrypt() {
-        let mut cc = ChaCha::new(&[
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
-            0x1c, 0x1d, 0x1e, 0x1f,
-        ])
-        .with_counter(0x00000001)
-        .with_nonce([0x00000000, 0x4a000000, 0x00000000]);
+        let mut cc = ChaCha::new(KEY)
+            .with_counter(0x00000001)
+            .with_nonce([0x00000000, 0x4a000000, 0x00000000]);
 
         let plaintext = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
         let ciphertext = [
@@ -281,13 +282,9 @@ pub mod test {
 
     #[test]
     fn test_decrypt() {
-        let mut cc = ChaCha::new(&[
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
-            0x1c, 0x1d, 0x1e, 0x1f,
-        ])
-        .with_counter(0x00000001)
-        .with_nonce([0x00000000, 0x4a000000, 0x00000000]);
+        let mut cc = ChaCha::new(KEY)
+            .with_counter(0x00000001)
+            .with_nonce([0x00000000, 0x4a000000, 0x00000000]);
 
         let plaintext = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
         let ciphertext = [
@@ -307,7 +304,7 @@ pub mod test {
 
     #[test]
     fn test_repeated_encrypt() {
-        let mut cc = ChaCha::new(&Vec::from("super_secret_key"));
+        let mut cc = ChaCha::new("super_secret_key");
         let plain = [
             "foo",
             "Hello, world!",
@@ -319,7 +316,7 @@ pub mod test {
             cipher.push(cc.encrypt(&Vec::from(s)));
         }
 
-        cc = ChaCha::new(b"super_secret_key");
+        cc = ChaCha::new("super_secret_key");
         for i in 0..(plain.len()) {
             assert_eq!(cc.decrypt(&cipher[i]), Vec::from(plain[i]));
         }

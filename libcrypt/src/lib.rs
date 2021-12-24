@@ -7,6 +7,7 @@
 //! input slightly simpler.
 
 pub mod chacha;
+pub mod chacha_rng;
 pub mod mersenne_twister;
 
 pub mod stdin_extras;

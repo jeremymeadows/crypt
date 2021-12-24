@@ -45,8 +45,7 @@ fn main() -> io::Result<()> {
     let key = io::stdin().input_hidden("Enter Crypt key:")?.into_bytes();
 
     let mut gen = MersenneTwister::from(&key);
-    let mut cc = ChaCha::new(
-        &key)
+    let mut cc = ChaCha::new(&key)
         .with_counter(0)
         .with_nonce([gen.next() as u32, gen.next() as u32, gen.next() as u32]);
 
